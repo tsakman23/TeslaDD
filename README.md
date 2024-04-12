@@ -45,6 +45,7 @@ python distill.py --dataset=CIFAR100 --ipc=50 --syn_steps=80 --expert_epochs=2 -
 ```
 python distill.py --dataset=ImageNet --ipc=1 --syn_steps=10 --expert_epochs=3 --max_start_epoch=10 --lr_img=10000 --lr_lr=1e-04 --lr_teacher=0.01 --batch_syn=100 --model=ConvNetD4 --teacher_label
 ```
+Part of the ImageNet-1K expert trajectories (5GB) can be downloaded [here](https://drive.google.com/file/d/1fGSX-3sEqe4OumlfjBYU161FHQ_UCZAW/view?usp=drive_link) for quick experimentation.
 
 ## Overall Architecture
 ![Overall architecture](https://github.com/justincui03/tesla/blob/main/resources/overview.gif)
