@@ -18,6 +18,7 @@ def main(args):
 
     args.dsa = True if args.dsa == 'True' else False
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print('Device: ', args.device)
     args.dsa_param = ParamDiffAug()
 
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader, loader_train_dict, class_map, class_map_inv = get_dataset(args.dataset, args.data_path, args.batch_real, args=args)
@@ -59,7 +60,7 @@ def main(args):
 
         timestamps = []
 
-        timestamps.append([p.detach().cpu() for p in teacher_net.parameters()])
+        timestamps.append([p.detach().cpu() for p in teacher_net.parameters()]) # save initial weights of the teacher model
 
         lr_schedule = [args.train_epochs // 2 + 1]
 
@@ -69,14 +70,14 @@ def main(args):
                                         criterion=criterion, args=args, aug=True)
 
             # if e % 10 == 0 and e > 0:
-            if e == args.train_epochs - 1:
+            if e == args.train_epochs - 1: # evaluate the model at the end of training
                 test_loss, test_acc = epoch("test", dataloader=testloader, net=teacher_net, optimizer=None,
                                             criterion=criterion, args=args, aug=False)
-                print("Itr: {}\tEpoch: {}\tTrain Acc: {}\tTest Acc: {}".format(it, e, train_acc, test_acc))
+                print("Itr: {}\tEpoch: {}\tTrain Acc: {}\tTest Acc: {}".format(it, e + 1, train_acc, test_acc))
+            else:
+                print("Itr: {}\tEpoch: {}\tTrain Acc: {}".format(it, e + 1, train_acc))
 
-            print("Itr: {}\tEpoch: {}\tTrain Acc: {}".format(it, e, train_acc))
-
-            timestamps.append([p.detach().cpu() for p in teacher_net.parameters()])
+            timestamps.append([p.detach().cpu() for p in teacher_net.parameters()]) # save weights of the teacher model after each epoch
 
             if e in lr_schedule and args.decay:
                 lr *= 0.1
@@ -110,7 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--buffer_path', type=str, default='./buffers', help='buffer path')
     parser.add_argument('--train_epochs', type=int, default=50)
     parser.add_argument('--zca', action='store_true', default=False)
-    parser.add_argument('--decay', action='store_true')
+    parser.add_argument('--decay', action='store_true', help='whether to decay learning rate')
     parser.add_argument('--mom', type=float, default=0, help='momentum')
     parser.add_argument('--l2', type=float, default=0, help='l2 regularization')
     parser.add_argument('--loss_type', type=str, default='ce', help='loss type, ce or mse')

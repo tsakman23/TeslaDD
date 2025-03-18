@@ -230,7 +230,7 @@ def epoch(mode, dataloader, net, optimizer, criterion, args, aug, texture=False)
         output = net(img)
         loss = criterion(output, lab)
 
-        if mode == 'train' and args.teacher_label:
+        if mode == 'train' and hasattr(args, 'teacher_label') and args.teacher_label:
             acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), np.argmax(datum[1].cpu().data.numpy(), axis=-1)))
         else:
             acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
