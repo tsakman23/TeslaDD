@@ -13,14 +13,16 @@ import random
 from reparam_module import ReparamModule
 from torch.utils.data import Subset
 from torch.utils.data import DataLoader
-from PIL import PngImagePlugin
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+import time
 
-# Set the maximum size for PNG text chunks to avoid issues with large metadata
+import json  # Add this for logging accuracy results
+
+from PIL import PngImagePlugin
 LARGE_ENOUGH_NUMBER = 100
 PngImagePlugin.MAX_TEXT_CHUNK = LARGE_ENOUGH_NUMBER * (1024**2)
 
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def main(args):
     # Validate arguments
@@ -33,6 +35,9 @@ def main(args):
     # Compute total experts if both max_experts and max_files are provided
     if args.max_experts is not None and args.max_files is not None:
         args.total_experts = args.max_experts * args.max_files
+    
+    # Start time
+    start_time = time.time()
 
     print("CUDNN STATUS: {}".format(torch.backends.cudnn.enabled))
 
@@ -222,10 +227,10 @@ def main(args):
             for model_eval in model_eval_pool:
                 print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
                 if args.dsa:
-                    print('DSA augmentation strategy: \n', args.dsa_strategy)
-                    print('DSA augmentation parameters: \n', args.dsa_param.__dict__)
+                    print('\nDSA augmentation strategy: ', args.dsa_strategy)
+                    print('\nDSA augmentation parameters: ', args.dsa_param.__dict__)
                 else:
-                    print('DC augmentation parameters: \n', args.dc_aug_param)
+                    print('\nDC augmentation parameters: ', args.dc_aug_param)
 
                 accs_test = [] # List to store test accuracy results
                 accs_train = [] # List to store train accuracy results
@@ -248,6 +253,9 @@ def main(args):
                 acc_test_mean = np.mean(accs_test) # Compute mean test accuracy
                 acc_test_std = np.std(accs_test) # Compute mean train accuracy
 
+                # Store accuracy results in accs_all_exps
+                accs_all_exps[model_eval].append((it, acc_test_mean, acc_test_std))
+
                 if acc_test_mean > best_acc[model_eval]:
                     best_acc[model_eval] = acc_test_mean # Update best accuracy
                     best_std[model_eval] = acc_test_std # Update best standard deviation
@@ -263,6 +271,9 @@ def main(args):
         if it in eval_it_pool and (save_this_it or it % 1000 == 0) and args.eval_it > 0:
             with torch.no_grad():
                 image_save = image_syn.cuda() # Move synthetic images to GPU
+
+                # Save synthetic data to data_save
+                data_save.append((it, image_save.cpu(), label_syn.cpu()))
 
                 # Define save directory based on dataset and wandb run name
                 save_dir = os.path.join(".", "logged_files", args.dataset, 'offline' if wandb.run.name is None else wandb.run.name)
@@ -496,6 +507,18 @@ def main(args):
         if it%10 == 0:
             print('%s iter = %04d, loss = %.4f' % (get_time(), it, grand_loss.item()))
 
+# After training, log accuracy results to a file
+    accuracy_log_path = os.path.join(".", "logged_files", args.dataset, "accuracy_results.json")
+    with open(accuracy_log_path, "w") as f:
+        json.dump(accs_all_exps, f, indent=4)
+
+    print(f"Accuracy results saved to {accuracy_log_path}")
+    end_time = time.time()
+    print(f"Total time taken: {end_time - start_time} seconds")
+
+    # Log total time taken to wandb
+    wandb.log({"Total_Time": end_time - start_time})
+
     wandb.finish()
 
 
@@ -516,7 +539,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_it', type=int, default=100, help='how often to evaluate')
 
     parser.add_argument('--epoch_eval_train', type=int, default=1000, help='epochs to train a model with synthetic data')
-    parser.add_argument('--Iteration', type=int, default=10000, help='how many distillation steps to perform')
+    parser.add_argument('--Iteration', type=int, default=2000, help='how many distillation steps to perform')
 
     parser.add_argument('--lr_img', type=float, default=1000, help='learning rate for updating synthetic images')
     parser.add_argument('--lr_lr', type=float, default=1e-05, help='learning rate for updating... learning rate')

@@ -1,3 +1,5 @@
+Forked from: https://github.com/justincui03/tesla?tab=readme-ov-file#
+
 # Scaling Up Dataset Distillation to ImageNet-1K with Constant Memory (TESLA)
 Hello!!! Thanks for checking out our [repo](https://github.com/justincui03/tesla) and [paper](https://arxiv.org/abs/2211.10586)! 🍻
 
