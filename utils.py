@@ -13,6 +13,167 @@ from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
 from networks import ConvNet
+import torchvision
+import shutil
+
+import os
+import shutil
+from PIL import Image
+from torchvision import datasets, transforms
+from torch.utils.data import Dataset
+import torch
+
+
+class Tiny10ImageFolder(Dataset):
+    """
+    Custom dataset for Tiny ImageNet, filtering to keep only the specified classes.
+    
+    Args:
+        root (str): Root directory of the dataset.
+        transform (callable, optional): Optional transform to be applied on a sample.
+        classes_to_keep (list): List of class names to keep in the dataset.
+        class_to_new_idx (dict): Mapping from class names to new indices.
+    """
+    def __init__(self, root, transform=None, classes_to_keep=None, class_to_new_idx=None):
+        full_dataset = datasets.ImageFolder(root)
+        self.transform = transform
+
+        self.imgs = []
+        self.labels = []
+
+        for path, label in full_dataset.samples:
+            class_name = full_dataset.classes[label]
+            if class_name in classes_to_keep:
+                new_label = class_to_new_idx[class_name]
+                self.imgs.append(path)
+                self.labels.append(new_label)
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def __getitem__(self, idx):
+        image = Image.open(self.imgs[idx]).convert('RGB')
+        if self.transform:
+            image = self.transform(image)
+        return image, self.labels[idx]
+
+
+def restructure_val_folder(data_path):
+    val_dir = os.path.join(data_path, 'val')
+    val_img_dir = os.path.join(val_dir, 'images')
+    ann_path = os.path.join(val_dir, 'val_annotations.txt')
+
+    with open(ann_path, 'r') as f:
+        lines = f.readlines()
+
+    for line in lines:
+        parts = line.strip().split('\t')
+        img_id = parts[0]
+        class_name = parts[1]
+        new_dir = os.path.join(val_dir, class_name)
+        os.makedirs(new_dir, exist_ok=True)
+        shutil.move(os.path.join(val_img_dir, img_id), os.path.join(new_dir, img_id))
+
+    shutil.rmtree(val_img_dir)
+    print("Restructured validation folder successfully.")
+
+
+def make_tiny10(data_path, args=None):
+    train_dir = os.path.join(data_path, "train")
+    val_dir = os.path.join(data_path, "val")
+
+    try:
+        datasets.ImageFolder(os.path.join(val_dir, "images"))
+        restructure_val_folder(data_path)
+    except FileNotFoundError:
+        pass
+
+    # Get the full dataset temporarily to determine class names
+    full_train = datasets.ImageFolder(train_dir)
+    classes_to_keep = full_train.classes[:10]  # first 10 classes
+    class_to_new_idx = {cls: idx for idx, cls in enumerate(classes_to_keep)}
+
+    print("Classes to keep:", classes_to_keep)
+    print("Class map:", class_to_new_idx)
+    raw_train = Tiny10ImageFolder(
+        root=train_dir,
+        transform=transforms.ToTensor(),
+        classes_to_keep=classes_to_keep,
+        class_to_new_idx=class_to_new_idx
+    )
+
+    # Stack all training tensors to compute mean and std
+    print("Computing mean and std...")
+    all_train_images = torch.stack([img for img, _ in raw_train])
+    mean = all_train_images.mean(dim=(0, 2, 3))
+    std = all_train_images.std(dim=(0, 2, 3))
+    print("Mean:", mean)
+    print("Std:", std)
+
+    if args is not None and getattr(args, 'zca', False):
+        transform = transforms.Compose([transforms.ToTensor()])
+    else:
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+        ])
+
+    dst_train = Tiny10ImageFolder(
+        root=train_dir,
+        transform=transform,
+        classes_to_keep=classes_to_keep,
+        class_to_new_idx=class_to_new_idx
+    )
+    print("Train dataset size:", len(dst_train))
+
+    dst_test = Tiny10ImageFolder(
+        root=val_dir,
+        transform=transform,
+        classes_to_keep=classes_to_keep,
+        class_to_new_idx=class_to_new_idx
+    )
+    print("Test dataset size:", len(dst_test))
+
+    # Save the new dataset above the tiny-imagenet folder, organized by class
+
+    # Create the base directories for train and validation
+    new_train_dir = os.path.join(data_path, "../tiny10", "train")
+    new_val_dir = os.path.join(data_path, "../tiny10", "val")
+    print("New train directory:", new_train_dir)
+    print("New val directory:", new_val_dir)
+
+    os.makedirs(new_train_dir, exist_ok=True)
+    os.makedirs(new_val_dir, exist_ok=True)
+
+    # Create an inverse mapping: integer label -> class name
+    class_map_inv = {v: k for k, v in class_to_new_idx.items()}
+
+    # Save training images in subfolders per class
+    for i in range(len(dst_train)):
+        file_path = dst_train.imgs[i]
+        label = dst_train.labels[i]
+        class_name = class_map_inv[label]  # get the class name from the label
+        # Create subfolder for this class inside new_train_dir
+        class_folder = os.path.join(new_train_dir, class_name)
+        os.makedirs(class_folder, exist_ok=True)
+        new_img_name = os.path.basename(file_path)
+        new_img_path = os.path.join(class_folder, new_img_name)
+        shutil.copy(file_path, new_img_path)
+
+    # Save validation images in subfolders per class
+    for i in range(len(dst_test)):
+        file_path = dst_test.imgs[i]
+        label = dst_test.labels[i]
+        class_name = class_map_inv[label]
+        # Create subfolder for this class inside new_val_dir
+        class_folder = os.path.join(new_val_dir, class_name)
+        os.makedirs(class_folder, exist_ok=True)
+        new_img_name = os.path.basename(file_path)
+        new_img_path = os.path.join(class_folder, new_img_name)
+        shutil.copy(file_path, new_img_path)
+
+    return mean, std, dst_train, dst_test, classes_to_keep, class_to_new_idx
+
 
 def get_dataset(dataset, data_path, batch_size=1, args=None):
 
@@ -51,6 +212,11 @@ def get_dataset(dataset, data_path, batch_size=1, args=None):
         class_names = dst_train.classes
         class_map = {x:x for x in range(num_classes)}
 
+    elif dataset == 'Tiny10':
+        channel = 3
+        im_size = (64, 64)
+        num_classes = 10
+        mean, std, dst_train, dst_test, class_names, class_map = make_tiny10(data_path, args=args)
 
     elif dataset == 'ImageNet':
         channel = 3
@@ -179,6 +345,16 @@ def get_network(model, channel, num_classes, im_size=(32, 32), dist=True):
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=7, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
     elif model == 'ConvNetD8':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=8, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ResNet18':
+        net = torchvision.models.resnet18(pretrained=False, num_classes=num_classes)
+    elif model == 'ResNet18_AP':
+        net = torchvision.models.resnet18(pretrained=False, num_classes=num_classes)
+        net.layer4[0].downsample[0] = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
+    elif model == 'ResNet18_DP':
+        net = torchvision.models.resnet18(pretrained=False, num_classes=num_classes)
+        net.layer4[0].downsample[0] = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+    elif model == 'VGG11':
+        net = torchvision.models.vgg11(pretrained=False, num_classes=num_classes)
 
     else:
         net = None
@@ -377,7 +553,7 @@ def get_daparam(dataset, model, model_eval, ipc):
 def get_eval_pool(eval_mode, model, model_eval):
     if eval_mode == 'M': # multiple architectures
         # model_eval_pool = ['MLP', 'ConvNet', 'AlexNet', 'VGG11', 'ResNet18', 'LeNet']
-        model_eval_pool = ['ConvNet', 'AlexNet', 'VGG11', 'ResNet18_AP', 'ResNet18']
+        model_eval_pool = ['ConvNet', 'VGG11', 'ResNet18']
         # model_eval_pool = ['MLP', 'ConvNet', 'AlexNet', 'VGG11', 'ResNet18']
     elif eval_mode == 'W': # ablation study on network width
         model_eval_pool = ['ConvNetW32', 'ConvNetW64', 'ConvNetW128', 'ConvNetW256']

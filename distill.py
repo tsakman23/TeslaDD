@@ -582,7 +582,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_files', type=int, default=None, help='number of expert files to read (leave as None unless doing ablations)')
     parser.add_argument('--max_experts', type=int, default=None, help='number of experts to read per file (leave as None unless doing ablations)')
 
-    parser.add_argument('--force_save', action='store_true', help='this will save images for 50ipc')
+    parser.add_argument('--force_save', action='store_true', default=True, help='this will save images for 50ipc')
 
     parser.add_argument('--teacher_label', action='store_true', default=False, help='whether to use label from the expert model to guide the distillation process.')
 

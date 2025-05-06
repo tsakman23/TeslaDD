@@ -5,7 +5,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from utils import get_dataset, get_network, get_daparam,\
     TensorDataset, epoch, ParamDiffAug
-import copy
+import time
 
 from PIL import PngImagePlugin
 LARGE_ENOUGH_NUMBER = 100
@@ -85,9 +85,9 @@ def main(args):
             if e == args.train_epochs - 1:  # Evaluate the model at the end of training
                 test_loss, test_acc = epoch("test", dataloader=testloader, net=teacher_net, optimizer=None,
                                             criterion=criterion, args=args, aug=False)
-                print("Itr: {}\tEpoch: {}\tTrain Acc: {}\tTest Acc: {}".format(it, e + 1, train_acc, test_acc))
+                print("Itr: {}\tEpoch: {}\tTrain Acc: {}\tTest Acc: {}".format(it + 1, e + 1, train_acc, test_acc))
             else:
-                print("Itr: {}\tEpoch: {}\tTrain Acc: {}".format(it, e + 1, train_acc))
+                print("Itr: {}\tEpoch: {}\tTrain Acc: {}".format(it + 1, e + 1, train_acc))
 
             # Save the weights of the teacher model after each epoch
             timestamps.append([p.detach().cpu() for p in teacher_net.parameters()])
@@ -114,6 +114,10 @@ def main(args):
 
 
 if __name__ == '__main__':
+
+    start_time = time.time()
+    print("Start time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)))
+
     parser = argparse.ArgumentParser(description='Parameter Processing')
     parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
@@ -138,4 +142,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     main(args)
 
+    end_time = time.time()
+    print("End time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
 
+    print("Total time: ", end_time - start_time)
